@@ -1,0 +1,381 @@
+---
+title: Digital Proxies for Validating Models of Past Socio-ecological Systems in the
+  Mediterranean Landscape Dynamics Project
+author: "C Michael Barton"
+date: "13 October 2021"
+output:
+  html_document:
+    df_print: paged
+subtitle: R Markdown Scripts for Analyses and Figures Used in Paper
+---
+
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo  = TRUE, message = FALSE, comment = FALSE, warning = FALSE, results = TRUE)
+require(Bchron)
+require(ggplot2)
+require(ggrepel)
+require(GGally)
+require(tidyverse)
+require(scales)
+```
+
+
+## Loading data files
+```{r load_data}
+load(file = "sp_nv7.rda")
+load(file = "sp_nv7_allmodels_10cm.rda")
+```
+
+## Optional saving data files
+```{r eval=FALSE}
+save(sp_nv7, file = "sp_nv7.rda")
+save(sp_nv7_allmodels_10cm, file = "sp_nv7_allmodels_10cm.rda")
+```
+
+# Analysis and Figures Used for Paper
+
+#### Rescale proxy model output to match empirical data
+```{r rescale}
+# convert digital phytoliths from gm/cm3 to phytoliths/gm, 
+# charcoal from gm/cm3 to fragments/cm3, 
+# artifacts from gm/cm3 to speciments/cm3
+# (all weights in grams)
+
+phytolith.wt <- 0.000011161
+charcoal.wt <- 0.000033493
+artifact.wt <- 1.0
+bulk.soil.density <- 1.2184
+sp.nv7.rescaled <- sp_nv7_allmodels_10cm %>% 
+  mutate(phy.grass.insitu = phy.grass.insitu/(phytolith.wt*bulk.soil.density), 
+         phy.grass.basinavg = phy.grass.basinavg/(phytolith.wt*bulk.soil.density), 
+         phy.wood.insitu = phy.wood.insitu/(phytolith.wt*bulk.soil.density), 
+         phy.wood.basinavg = phy.wood.basinavg/(phytolith.wt*bulk.soil.density), 
+         charcoal.total.insitu = charcoal.total.insitu/charcoal.wt, 
+         charcoal.total.basinavg = charcoal.total.basinavg/charcoal.wt,
+         artifacts = artifacts/artifact.wt)
+
+```
+
+
+#### Pytolith Percents by Date (FIGURE 3)
+```{r fig3.1, fig.height=6, fig.width=6}
+options(scipen = 2)
+labels <- c(phy.grass='grass types', phy.herb='herbaceous types', phy.woody='woody types', phy.riperian='riparian types')
+
+na.omit(sp_nv7) %>% 
+  dplyr::filter(phy.total>2) %>% 
+  gather(type, count, phy.grass, phy.herb, phy.woody, phy.riperian) %>% 
+  mutate(type = factor(type, levels = c('phy.grass', 'phy.herb', 'phy.woody', 'phy.riperian'))) %>% 
+  ggplot(aes(x=CalBP.midpoint, y=(100*count/phy.total))) + 
+  geom_col(aes(fill=type)) + 
+  scale_fill_manual(values = c('green4','green', 'tan3', 'turquoise', 'lightblue')) +   
+  scale_x_continuous(trans = "reverse", limits = c(8500,2500), breaks = c(8000,7000,6000,5000,4000,3000)) + 
+  coord_flip() + 
+  facet_wrap(~type, nrow = 1, labeller=labeller(type = labels)) + 
+  labs(x='age cal BP\n', y='\npercent', title = "Phytoliths from Core SP.NV.7", subtitle = "Canal de Navarrés Valley, Valencia, Spain", fill="morphotype") + 
+  theme_bw(base_size = 20) + 
+  theme(legend.position = "none")
+```
+
+
+#### Charcoal percents by date (FIGURE 3)
+```{r fig3.2, fig.height=6, fig.width=6}
+options(scipen = 2)
+labels <- c(indeterminate.pct = "indeterminate", irregular.pct = "irregular types", elongated.pct = "elongated types", geometric.pct="geometric types")
+
+sp_nv7 %>% 
+  mutate(indeterminate.pct = ch.indeterminate/charcoal.total, irregular.pct = ch.irregular/charcoal.total, elongated.pct = ch.elongated/charcoal.total, geometric.pct = ch.geometric/charcoal.total) %>% 
+  gather(type, percent, indeterminate.pct, irregular.pct, elongated.pct, geometric.pct) %>% 
+  mutate(type = factor(type, levels = c('indeterminate.pct', 'irregular.pct', 'elongated.pct', 'geometric.pct')), 
+         percent = 100*percent) %>% 
+  ggplot(aes(x=CalBP.midpoint, y=percent)) + 
+  geom_col(aes(fill=type, group=type)) +   
+  scale_fill_manual(values = c('grey50','orange','green','tan3')) + 
+  scale_x_continuous(trans = "reverse", limits = c(8500,2500), breaks = c(8000,7000,6000,5000,4000,3000)) + 
+  coord_flip() + 
+  facet_wrap(~type, nrow = 1, labeller=labeller(type = labels)) + 
+  labs(x='age cal BP\n', y='\npercent',  title = "Charcoal from Core SP.NV.7", subtitle = "Canal de Navarrés Valley, Valencia, Spain", fill="charcoal\nmorphotype") + 
+  theme_bw(base_size = 20) + 
+  theme(legend.position = "none")
+```
+
+
+#### Phytoliths Trees/Open and Total Charcoal Concentration (FIGURE 4)
+
+```{r fig4, fig.height=6, fig.width=4}
+options(scipen = 2)
+labels <- c(charcoal = "charcoal concentration\n(fragments/cm3)", TO = "trees/open phytoliths ratio", phy.per.gm = "phytolith concentration\n(phytoliths/gm)")
+
+sp_nv7 %>% 
+  mutate(TO = phy.woody/(phy.grass+phy.herb), 
+         charcoal = charcoal.total) %>%
+  select(c(CalBP.midpoint, TO, charcoal, phy.per.gm)) %>% 
+  gather(type, frequency, c(TO, charcoal, phy.per.gm)) %>% 
+  mutate(type = factor(type, levels = c('charcoal', 'phy.per.gm', 'TO'))) %>%
+  ggplot(aes(x=CalBP.midpoint)) + 
+  geom_col(aes(y=frequency, fill=type)) + 
+  scale_fill_manual(values = c('grey50', 'green4', 'tan3')) +   
+  scale_x_continuous(trans = "reverse") + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Empirical Proxies for Core SP.NV.7", subtitle = "Canal de Navarrés Valley, Valencia, Spain", fill="morphotype") + 
+  facet_wrap(~type, scales = "free_x", nrow = 1, labeller=labeller(type = labels)) +
+  theme_bw(base_size = 16)+ 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### Comparing Empirical and Modeled Phytolith and Charcoal Concentrations (FIGURE 5)
+
+```{r fig5, fig.height=6, fig.width=6}
+bind_rows(
+  sp_nv7 %>% 
+    mutate(charcoal.per.cm3 = charcoal.total, cal.BP = CalBP.midpoint, model = "empirical") %>% 
+    select(model, phy.per.gm,charcoal.per.cm3, cal.BP), 
+  sp.nv7.rescaled %>% 
+    mutate(phy.per.gm = phy.grass.insitu+phy.grass.basinavg+phy.wood.insitu+phy.wood.basinavg, charcoal.per.cm3 = charcoal.total.insitu+charcoal.total.basinavg) %>% 
+    select(model, phy.per.gm,charcoal.per.cm3, cal.BP)) %>% 
+mutate(model = factor(model, levels = c("empirical", "woodland", "matorral", "agricultural", "pastoral"))) %>% 
+ggplot(aes(x=model)) +
+  geom_boxplot(aes(y=phy.per.gm), fill = 'grey90', size = 1, outlier.size = 3) + 
+  labs(y='phytoliths/gm sediment', x='empirical and modeled phytolith concentrations') +
+  theme_bw(base_size = 25)
+
+bind_rows(
+  sp_nv7 %>% 
+    mutate(charcoal.per.cm3 = charcoal.total, cal.BP = CalBP.midpoint, model = "empirical") %>% 
+    select(model, phy.per.gm,charcoal.per.cm3, cal.BP), 
+  sp.nv7.rescaled %>% 
+    mutate(phy.per.gm = phy.grass.insitu+phy.grass.basinavg+phy.wood.insitu+phy.wood.basinavg, charcoal.per.cm3 = charcoal.total.insitu+charcoal.total.basinavg) %>% 
+    select(model, phy.per.gm,charcoal.per.cm3, cal.BP)) %>% 
+mutate(model = factor(model, levels = c("empirical", "woodland", "matorral", "agricultural", "pastoral"))) %>% 
+ggplot(aes(x=model)) +
+  geom_boxplot(aes(y=charcoal.per.cm3), fill = 'grey90', size = 1, outlier.size = 3) + 
+  scale_y_continuous(limits = c(0,200)) +
+  labs(y='charcoal fragments/cm3 sediment', x='empirical and modeled charcoal concentrations') +
+  theme_bw(base_size = 25)
+
+
+```
+
+
+
+#### Woodland Model (FIGURE 6)
+
+```{r fig6.1, fig.height=6, fig.width=4}
+options(scipen = 2)
+labels <- c(charcoal = "charcoal\nfragments per cm3", woody = "woody\nphytoliths per gm", open = "open vegetation\nphytoliths per gm")
+
+sp.nv7.rescaled %>% 
+  dplyr::filter(model=='woodland') %>% 
+  mutate(open=phy.grass.insitu + phy.grass.basinavg, 
+         woody=phy.wood.insitu + phy.wood.basinavg, 
+         charcoal=charcoal.total.insitu + charcoal.total.basinavg) %>%
+  select(c(cal.BP, open, woody, charcoal)) %>% 
+  gather(type, frequency, c(open, woody, charcoal)) %>% 
+  mutate(proxy=if_else(type == 'charcoal', 'charcoal','phytoliths'),
+    type = factor(type, levels = c('charcoal', 'woody', 'open'))) %>%
+  ggplot(aes(x=cal.BP)) + 
+  geom_col(aes(y=frequency, fill=type)) + 
+  scale_fill_manual(values = c('grey50','tan3','green')) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Woodland, No People", subtitle = "concentrations per unit of sediment") + 
+  facet_wrap(~type, scales = "free_x", labeller=labeller(type = labels)) + 
+  theme_bw(base_size = 18) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### Matorral Model (FIGURE 6)
+
+```{r fig6.2, fig.height=6, fig.width=4}
+options(scipen = 2)
+labels <- c(charcoal = "charcoal\nfragments per cm3", woody = "woody\nphytoliths per gm", open = "open vegetation\nphytoliths per gm")
+
+sp.nv7.rescaled %>% 
+  dplyr::filter(model=='matorral') %>% 
+  mutate(open=phy.grass.insitu + phy.grass.basinavg, 
+         woody=phy.wood.insitu + phy.wood.basinavg, 
+         charcoal=charcoal.total.insitu + charcoal.total.basinavg) %>%
+  select(c(cal.BP, open, woody, charcoal)) %>% 
+  gather(type, frequency, c(open, woody, charcoal)) %>% 
+  mutate(proxy=if_else(type == 'charcoal', 'charcoal','phytoliths'),
+    type = factor(type, levels = c('charcoal', 'woody', 'open'))) %>%
+  ggplot(aes(x=cal.BP)) + 
+  geom_col(aes(y=frequency, fill=type)) + 
+  scale_fill_manual(values = c('grey50','tan3','green')) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Matorral, No People", subtitle = "concentrations per unit of sediment") + 
+  facet_wrap(~type, scales = "free_x", labeller=labeller(type = labels)) + 
+  theme_bw(base_size = 18) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### Pastoralists Model (FIGURE 7)
+
+```{r fig7.1, fig.hight=6, fig.width=4}
+options(scipen = 2)
+labels <- c(charcoal = "charcoal\nfragments per cm3", woody = "woody\nphytoliths per gm", open = "open vegetation\nphytoliths per gm")
+
+sp.nv7.rescaled %>% 
+  dplyr::filter(model=='pastoral') %>% 
+  mutate(open=phy.grass.insitu + phy.grass.basinavg, 
+         woody=phy.wood.insitu + phy.wood.basinavg, 
+         charcoal=charcoal.total.insitu + charcoal.total.basinavg) %>%
+  select(c(cal.BP, open, woody, charcoal)) %>% 
+  gather(type, frequency, c(open, woody, charcoal)) %>% 
+  mutate(proxy=if_else(type == 'charcoal', 'charcoal','phytoliths'),
+    type = factor(type, levels = c('charcoal', 'woody', 'open'))) %>%
+  ggplot(aes(x=cal.BP)) + 
+  geom_col(aes(y=frequency, fill=type)) + 
+  scale_fill_manual(values = c('grey50','tan3','green')) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Pastoralist Land-Use", subtitle = "concentrations per unit of sediment") + 
+  facet_wrap(~type, scales = "free_x", labeller=labeller(type = labels)) + 
+  theme_bw(base_size = 18) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### Agriculturalist (FIGURE 7)
+
+```{r fig7.2, fig.height=6, fig.width=4}
+options(scipen = 2)
+labels <- c(charcoal = "charcoal\nfragments per cm3", woody = "woody\nphytoliths per gm", open = "open vegetation\nphytoliths per gm")
+
+sp.nv7.rescaled %>% 
+  dplyr::filter(model=='agricultural') %>% 
+  mutate(open=phy.grass.insitu + phy.grass.basinavg, 
+         woody=phy.wood.insitu + phy.wood.basinavg, 
+         charcoal=charcoal.total.insitu + charcoal.total.basinavg) %>%
+  select(c(cal.BP, open, woody, charcoal)) %>% 
+  gather(type, frequency, c(open, woody, charcoal)) %>% 
+  mutate(proxy=if_else(type == 'charcoal', 'charcoal','phytoliths'),
+    type = factor(type, levels = c('charcoal', 'woody', 'open'))) %>%
+  ggplot(aes(x=cal.BP)) + 
+  geom_col(aes(y=frequency, fill=type)) + 
+  scale_fill_manual(values = c('grey50','tan3','green')) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Agricultural Land-Use", subtitle = "concentrations per unit of sediment") + 
+  facet_wrap(~type, scales = "free_x", labeller=labeller(type = labels)) + 
+  theme_bw(base_size = 18) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### All model TO (FIGURE 8)
+
+```{r fig8, fig.height=6, fig.width=5}
+sp.nv7.rescaled %>% 
+  mutate(to=(phy.wood.insitu + phy.wood.basinavg)/(phy.grass.insitu + phy.grass.basinavg), 
+         model = factor(model, levels = c('woodland', 'matorral', 'agricultural', 'pastoral'))) %>%
+  ggplot(aes(x=cal.BP, y=to)) + 
+  geom_col(fill='tan3', width=35) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies", subtitle = "Trees/Open Phytoliths Ratio") + 
+  facet_wrap(~model, nrow = 1) + 
+  theme_bw(base_size = 16) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### All model Charcoal (FIGURE 9)
+
+```{r fig9, fig.height=6, fig.width=5}
+options(scipen = 2)
+sp.nv7.rescaled %>% 
+  mutate(charcoal=charcoal.total.insitu + charcoal.total.basinavg, 
+         model = factor(model, levels = c('woodland', 'matorral', 'agricultural', 'pastoral'))) %>%
+  ggplot(aes(x=cal.BP)) + 
+  geom_col(aes(y=charcoal), fill='grey50', width=35) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip(ylim = c(0,200)) + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies", subtitle = "Charcoal per cm3") + 
+  facet_wrap(~model, nrow = 1, scales = 'free_x') + 
+  theme_bw(base_size = 16) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+
+#### Empirical Phytoliths T/O Ratio (FIGURE 8 & 10)
+
+```{r fig8&10, fig.height=6, fig.width=2}
+options(scipen = 2)
+
+sp_nv7 %>% 
+  mutate(TO = phy.woody/(phy.grass+phy.herb+phy.woody)) %>%
+  ggplot(aes(x=CalBP.midpoint)) + 
+  geom_col(aes(y=TO), fill='tan3') + 
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Empirical Proxies", subtitle = "Trees/Open Phytoliths Ratio") + 
+  theme_bw(base_size = 16)+ 
+  theme(legend.position = "none")
+```
+
+#### Total Empirical Charcoal Concentration (FIGURE 9 & 10)
+
+```{r fig9&10, fig.height=6, fig.width=2}
+options(scipen = 2)
+
+sp_nv7 %>% 
+  ggplot(aes(x=CalBP.midpoint)) + 
+  geom_col(aes(y=charcoal.total), fill='grey50') + 
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Empirical Proxies", subtitle = "Charcoal per cm3") + 
+  theme_bw(base_size = 16)+ 
+  theme(legend.position = "none")
+```
+
+#### No People models TO (FIGURE 10)
+
+```{r fig10.1, fig.height=6, fig.width=3}
+options(scipen = 2)
+
+bind_rows(sp.nv7.rescaled %>% 
+            dplyr::filter(model == 'matorral') %>% 
+            mutate(cal.BP2 = 7600-(2*model.yr), 
+                   stretch = 'years X 2', 
+                   TO=(phy.wood.insitu + phy.wood.basinavg)/(phy.grass.insitu + phy.grass.basinavg)), 
+          sp.nv7.rescaled %>% 
+            dplyr::filter(model == 'matorral') %>% 
+            mutate(cal.BP2 = 8000-(4*model.yr), 
+                   stretch = 'years X 4', 
+                   TO=(phy.wood.insitu + phy.wood.basinavg)/(phy.grass.insitu + phy.grass.basinavg))) %>% 
+  ggplot(aes(x=cal.BP2)) + 
+  geom_col(aes(y=TO), fill='tan3', width = 80) + 
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Matorral", subtitle = "Trees/Open Phytoliths Ratio") + 
+  facet_wrap(~stretch, nrow = 1) + 
+  theme_bw(base_size = 16) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
+```
+
+#### No people models Charcoal (FIGURE 10)
+
+```{r fig10.2, fig.height=6, fig.width=3}
+options(scipen = 2)
+
+bind_rows(sp.nv7.rescaled %>% 
+            dplyr::filter(model == 'matorral') %>% 
+            mutate(cal.BP2 = 7600-(2*model.yr), 
+                   stretch = 'years X 2', 
+                   charcoal=charcoal.total.insitu + charcoal.total.basinavg), 
+          sp.nv7.rescaled %>% 
+            dplyr::filter(model == 'matorral') %>% 
+            mutate(cal.BP2 = 8000-(4*model.yr), 
+                   stretch = 'years X 4', 
+                   charcoal=charcoal.total.insitu + charcoal.total.basinavg)) %>% 
+  ggplot(aes(x=cal.BP2)) + 
+  geom_col(aes(y=charcoal), fill='grey50', width=80) +   
+  scale_x_continuous(trans = "reverse", limits = c(8000,6000), breaks = c(8000,7500,7000,6500,6000)) + 
+  coord_flip() + 
+  labs(x='age cal BP\n', y='', title = "Modeled Proxies - Matorral", subtitle = "Charcoal per cm3") + 
+  facet_wrap(~stretch, nrow = 1) + 
+  theme_bw(base_size = 15.5) + 
+  theme(legend.position = "none")
+```
+
+
