@@ -1,9 +1,20 @@
-cff-version: 1.1.0
-message: "If you use this software, please cite it as below."
+message: "If you use this R analysis and data, please cite it as below"
+type: dataset
 authors:
   - family-names: Barton
     given-names: C Michael
     orcid: https://orcid.org/0000-0003-2561-1927
-title: cmbarton/ProxyModeling_2021: RMarkdown script and data for Digital Proxies... paper 2021
+  - family-names: "Ullah"
+    given-names: "Isaac IT"
+    orcid: "0000-0002-3533-9421"
+  - family-names: "Gauthier"
+    given-names: "Nicholas"
+    orcid: "0000-0002-2225-5827"
+  - family-names: "Snitker"
+    given-names: "Grant"
+    orcid: "0000-0003-3548-2241"
+title: cmbarton/ProxyModeling_2021: RMarkdown script and data for Digital Proxies paper 2021
 version: v1.0
+url: https://github.com/cmbarton/ProxyModeling_2021
+doi: 10.5281/zenodo.5567815
 date-released: 2021-10-13
